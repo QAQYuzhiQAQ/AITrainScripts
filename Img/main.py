@@ -4,7 +4,9 @@
 #
 # 可用脚本一览:
 #   crop_2k_png.py              - 裁剪 2560×1440 PNG 到指定区域
-#   image_converter.py          - GUI 图片格式转换与智能缩放（推荐入口）
+#   image_converter.py          - GUI 图片格式转换与智能缩放（逻辑在 img_tools）
+#   核心库 img_tools/           - 业务逻辑
+#   Web Hub: python -m hub       - 推荐统一入口 http://127.0.0.1:8765
 #   remove_non_2k_images.py     - 删除非 2K 尺寸的图片
 #   resize_png_center_1024.py   - PNG 缩放并居中填充至 1024×1024
 #   rename_images_numbered.py   - 图片批量重命名（前缀+补零编号）

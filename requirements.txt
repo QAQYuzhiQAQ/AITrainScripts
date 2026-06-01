@@ -1,0 +1,5 @@
+Pillow>=10.0.0
+natsort>=8.0.0
+pillow-heif>=0.13.0; python_version >= "3.9"
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
