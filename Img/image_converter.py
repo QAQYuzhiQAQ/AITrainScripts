@@ -18,7 +18,7 @@ ensure_repo_on_path()
 try:
     from PIL import Image  # noqa: F401 — 启动时检查 Pillow
 except ImportError:
-    print("❌ 请先安装 Pillow: pip install Pillow")
+    print("[错误] 未安装 Pillow，请执行: pip install Pillow")
     raise SystemExit(1)
 
 from img_tools.convert import process_all
@@ -27,7 +27,7 @@ from img_tools.convert import process_all
 class ImageConverterApp:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("双双的图片工坊 Pro Max ✨")
+        self.root.title("图片格式转换")
         self.root.geometry("550x450")
         self.setup_ui()
 
@@ -35,14 +35,14 @@ class ImageConverterApp:
         main_frame = ttk.Frame(self.root, padding="20")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(main_frame, text="📸 目标路径 (图片来源):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="目标路径 (图片来源):").grid(row=0, column=0, sticky=tk.W, pady=5)
         self.target_var = tk.StringVar()
         ttk.Entry(main_frame, textvariable=self.target_var, width=40).grid(
             row=1, column=0, columnspan=2, sticky=tk.EW
         )
         ttk.Button(main_frame, text="浏览", command=self.browse_target).grid(row=1, column=2, padx=5)
 
-        ttk.Label(main_frame, text="📂 输出路径 (PNG结果):").grid(row=2, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="输出路径 (PNG 结果):").grid(row=2, column=0, sticky=tk.W, pady=5)
         self.output_var = tk.StringVar()
         ttk.Entry(main_frame, textvariable=self.output_var, width=40).grid(
             row=3, column=0, columnspan=2, sticky=tk.EW
@@ -72,12 +72,12 @@ class ImageConverterApp:
 
         btn_frame = ttk.Frame(main_frame)
         btn_frame.grid(row=6, column=0, columnspan=3, pady=15)
-        ttk.Button(btn_frame, text="🚀 启动魔法处理", command=self.run_convert).pack(
+        ttk.Button(btn_frame, text="开始处理", command=self.run_convert).pack(
             side=tk.LEFT, padx=10
         )
         ttk.Button(btn_frame, text="退出", command=self.root.quit).pack(side=tk.LEFT, padx=10)
 
-        self.status_var = tk.StringVar(value="准备就绪，杰西随时可以下发任务啦 🫡")
+        self.status_var = tk.StringVar(value="就绪")
         ttk.Label(main_frame, textvariable=self.status_var, foreground="gray").grid(
             row=7, column=0, columnspan=3, sticky=tk.W
         )
@@ -99,17 +99,17 @@ class ImageConverterApp:
                 raise ValueError
             target_area = w * h
         except ValueError:
-            messagebox.showerror("哎呀", "基准宽度和高度得是正整数哦！")
+            messagebox.showerror("错误", "基准宽度和高度必须为正整数。")
             return
 
         target, output = self.target_var.get().strip(), self.output_var.get().strip()
         is_rec = self.recursive_var.get()
 
         if not target or not output:
-            messagebox.showwarning("提示", "宝，请先选好路径哟～")
+            messagebox.showwarning("提示", "请先选择来源路径与输出路径。")
             return
 
-        self.status_var.set("全力工作中，双双正在施展魔法... 🔥")
+        self.status_var.set("处理中…")
         self.root.update()
 
         try:
@@ -118,19 +118,19 @@ class ImageConverterApp:
             errors = result.errors
 
             if not result.ok and not converted:
-                messagebox.showerror("出错啦", result.message)
+                messagebox.showerror("错误", result.message)
             elif errors:
                 messagebox.showwarning(
-                    "完成", f"处理了 {len(converted)} 张，但有 {len(errors)} 个异常。"
+                    "完成", f"已处理 {len(converted)} 张，{len(errors)} 项异常。"
                 )
             else:
                 messagebox.showinfo(
-                    "大功告成", f"🎉 任务圆满完成！共完美转换 {len(converted)} 张图片。"
+                    "完成", f"处理完成，共转换 {len(converted)} 张图片。"
                 )
-            self.status_var.set(f"最近任务：处理 {len(converted)} 张成功 ✅")
+            self.status_var.set(f"上次任务：成功 {len(converted)} 张")
         except Exception as e:
-            messagebox.showerror("崩溃了", f"程序报错：{e}")
-            self.status_var.set("处理失败 ❌")
+            messagebox.showerror("错误", f"程序异常：{e}")
+            self.status_var.set("处理失败")
 
     def run(self):
         self.root.mainloop()

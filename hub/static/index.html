@@ -34,9 +34,15 @@
             <svg class="nav-section-chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.94a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
           </button>
           <div class="nav-section-items">
-            <button type="button" data-page="workflow" class="nav-item w-full nav-item-highlight">LoRA 工作流</button>
+            <button type="button" data-page="workflow" class="nav-item w-full nav-item-highlight">LoRA 完整流程</button>
+        <button data-page="autoTag" class="nav-item w-full">自动打标</button>
+        <button data-page="captionClean" class="nav-item w-full">Caption 清洗</button>
+        <button data-page="loraTrain" class="nav-item w-full">LoRA 训练</button>
             <button type="button" data-page="convert" class="nav-item w-full">格式转换</button>
-            <button type="button" data-page="resizeCanvas" class="nav-item w-full">画布填充</button>
+            <button data-page="toIco" class="nav-item w-full">转 ICO</button>
+        <button data-page="compress" class="nav-item w-full">图片压缩</button>
+        <button data-page="formatConvert" class="nav-item w-full">格式互转</button>
+        <button type="button" data-page="resizeCanvas" class="nav-item w-full">画布填充</button>
             <button type="button" data-page="crop2k" class="nav-item w-full">区域裁剪</button>
             <button type="button" data-page="filter2k" class="nav-item w-full">尺寸筛选</button>
             <button type="button" data-page="rename" class="nav-item w-full">批量重命名</button>
@@ -73,72 +79,240 @@
 
       <main class="flex-1 overflow-y-auto p-6">
         <div class="mx-auto max-w-3xl space-y-4">
-          <!-- LoRA 工作流 -->
+          <!-- LoRA 完整流程 -->
           <section id="page-workflow" class="page-panel space-y-4">
             <div class="card space-y-4 p-5">
               <div class="help-box">
-                <p><strong>一键流程：</strong>读取来源目录 → 按所选模式处理为 PNG → 写入输出目录 → 批量重命名（可选联动 .txt / .caption）。</p>
-                <p><strong>模式一 · 等效面积（64 倍数）：</strong>目标面积 = 宽×高，输出画布长宽均为 64 的倍数，等比缩放 + 透明边（不拉伸）。</p>
-                <p><strong>模式二 · 固定画布：</strong>输出严格等于所填宽×高，等比缩放 + 透明边补足。</p>
+                <p><strong>使用前请手动准备：</strong>创建角色文件夹（如 <code>characterABC</code>），将<strong>未经处理的原始图片</strong>放在该文件夹根目录。</p>
+                <p>点击运行后程序将自动：创建 <code>res/</code>、<code>output/{重复次数}_output/</code> → 移动原图到 <code>res/</code> → 裁切转化 → 重命名 → 打标 → Caption 清洗 → 以 <code>output/</code> 为数据目录训练 LoRA。</p>
               </div>
-              <div class="grid gap-4 sm:grid-cols-2">
-                <div class="path-field">
-                  <label class="label">图片来源目录</label>
-                  <div class="flex gap-2">
-                    <input type="text" id="wf-source" class="input flex-1" />
-                    <button type="button" class="btn-secondary browse-btn">浏览</button>
-                  </div>
-                </div>
-                <div class="path-field">
-                  <label class="label">处理后输出目录</label>
-                  <div class="flex gap-2">
-                    <input type="text" id="wf-output" class="input flex-1" />
-                    <button type="button" class="btn-secondary browse-btn">浏览</button>
-                  </div>
+              <div class="path-field">
+                <label class="label">角色根目录（characterABC）</label>
+                <div class="flex gap-2">
+                  <input type="text" id="pipe-root" class="input flex-1" placeholder="例如 C:/LoRA/characterABC" />
+                  <button type="button" class="btn-secondary browse-btn">浏览</button>
                 </div>
               </div>
-              <div class="grid gap-4 sm:grid-cols-2">
+              <div class="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label class="label">重复次数（子文件夹名前缀）</label>
+                  <input type="number" id="pipe-repeat" class="input w-full" value="10" min="1" max="999" />
+                  <p class="mt-1 text-xs text-zinc-500">生成 output/10_output/</p>
+                </div>
                 <div>
                   <label class="label">目标宽度</label>
-                  <input type="number" id="wf-width" class="input w-full" value="1024" min="1" />
+                  <input type="number" id="pipe-width" class="input w-full" value="1024" min="1" />
                 </div>
                 <div>
                   <label class="label">目标高度</label>
-                  <input type="number" id="wf-height" class="input w-full" value="1024" min="1" />
+                  <input type="number" id="pipe-height" class="input w-full" value="1024" min="1" />
                 </div>
               </div>
               <div>
-                <label class="label mb-2 block">处理方式</label>
+                <label class="label mb-2 block">图片处理方式（步骤 3）</label>
                 <div class="space-y-2 text-sm">
                   <label class="flex items-start gap-2">
-                    <input type="radio" name="wf-mode" value="area_64" checked class="mt-1" />
-                    <span>等效像素面积（64 倍数画布，适合 SD/LoRA 训练分辨率）</span>
+                    <input type="radio" name="pipe-mode" value="area_64" checked class="mt-1" />
+                    <span>等效像素面积（64 倍数画布，等比缩放 + 透明居中）</span>
                   </label>
                   <label class="flex items-start gap-2">
-                    <input type="radio" name="wf-mode" value="fixed_canvas" class="mt-1" />
+                    <input type="radio" name="pipe-mode" value="fixed_canvas" class="mt-1" />
                     <span>固定宽×高画布（输出尺寸与输入值完全一致）</span>
                   </label>
                 </div>
               </div>
-              <label class="flex items-center gap-2 text-sm">
-                <input type="checkbox" id="wf-recursive" class="rounded" />
-                递归子文件夹
-              </label>
-              <hr class="border-zinc-200 dark:border-zinc-700" />
-              <p class="text-sm font-medium">步骤 4：批量重命名（输出目录内）</p>
-              <div class="flex gap-2 border-b border-zinc-200 pb-3 dark:border-zinc-700">
-                <button type="button" class="wf-rename-tab active" data-wf-rename="numbered">前缀 + 编号</button>
-                <button type="button" class="wf-rename-tab" data-wf-rename="sequential">纯序号</button>
-                <button type="button" class="wf-rename-tab" data-wf-rename="none">不重命名</button>
-              </div>
-              <div id="wf-numbered-fields" class="grid gap-4 sm:grid-cols-3">
+              <div class="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label class="label">前缀</label>
-                  <input type="text" id="wf-prefix" class="input w-full" placeholder="可选" />
+                  <label class="label">重命名前缀</label>
+                  <input type="text" id="pipe-prefix" class="input w-full" placeholder="可选" />
                 </div>
                 <div>
-                  <label class="label">起始编号</label>
-                  <input type="number" id="wf-start-num" class="input w-full" value="1" min="0" />
+                  <label class="label">编号位数</label>
+                  <input type="number" id="pipe-digits" class="input w-full" value="4" min="1" max="8" />
+                </div>
+              </div>
+              <hr class="border-zinc-200 dark:border-zinc-700" />
+              <p class="text-sm font-medium">打标与 Caption 清洗（步骤 5–6）</p>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="label">Caption 预设</label>
+                  <select id="pipe-caption-preset" class="input w-full"></select>
+                </div>
+                <div>
+                  <label class="label">触发词（留空则用预设）</label>
+                  <input type="text" id="pipe-trigger" class="input w-full" />
+                </div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="label">General 阈值</label>
+                  <input type="number" id="pipe-general-thresh" class="input w-full" value="0.35" min="0" max="1" step="0.05" />
+                </div>
+                <div>
+                  <label class="label">Character 阈值</label>
+                  <input type="number" id="pipe-char-thresh" class="input w-full" value="0.1" min="0" max="1" step="0.05" />
+                </div>
+              </div>
+              <hr class="border-zinc-200 dark:border-zinc-700" />
+              <p class="text-sm font-medium">LoRA 训练参数（步骤 7，train_data_dir 固定为 output/）</p>
+              <div>
+                <label class="label">训练预设</label>
+                <select id="pipe-lora-preset" class="input w-full"></select>
+              </div>
+              <div class="path-field">
+                <label class="label">底模路径</label>
+                <input type="text" id="pipe-base-model" class="input w-full" />
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="label">输出名称 output_name</label>
+                  <input type="text" id="pipe-output-name" class="input w-full" />
+                </div>
+                <div class="path-field">
+                  <label class="label">LoRA 输出目录 output_dir</label>
+                  <div class="flex gap-2">
+                    <input type="text" id="pipe-output-dir" class="input flex-1" />
+                    <button type="button" class="btn-secondary browse-btn">浏览</button>
+                  </div>
+                </div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label class="label">最大 Epoch</label>
+                  <input type="number" id="pipe-epochs" class="input w-full" min="1" />
+                </div>
+                <div>
+                  <label class="label">Batch Size</label>
+                  <input type="number" id="pipe-batch-size" class="input w-full" min="1" />
+                </div>
+                <div>
+                  <label class="label">network_dim</label>
+                  <input type="number" id="pipe-dim" class="input w-full" min="1" />
+                </div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="label">UNet 学习率</label>
+                  <input type="number" id="pipe-unet-lr" class="input w-full" min="0" step="0.00001" />
+                </div>
+                <div>
+                  <label class="label">keep_tokens</label>
+                  <input type="number" id="pipe-keep-tokens" class="input w-full" min="0" />
+                </div>
+              </div>
+              <button type="button" id="btn-lora-pipeline" class="btn-primary w-full sm:w-auto">开始完整 LoRA 流程</button>
+            </div>
+            <div id="pipe-progress-panel" class="card hidden space-y-3 p-5">
+              <div class="flex items-center justify-between text-sm">
+                <span id="pipe-progress-label" class="font-medium">流程进度</span>
+                <span id="pipe-progress-step" class="text-zinc-500 dark:text-zinc-400">—</span>
+              </div>
+              <div class="h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+                <div id="pipe-progress-bar" class="train-progress-bar h-full rounded-full bg-emerald-500 transition-all duration-300" style="width:0%"></div>
+              </div>
+              <p id="pipe-progress-detail" class="text-xs text-zinc-500 dark:text-zinc-400">—</p>
+            </div>
+          </section>
+
+          <!-- WD14 自动打标 -->
+          <section id="page-autoTag" class="page-panel hidden space-y-4">
+            <div class="card space-y-4 p-5">
+              <div class="help-box">
+                <p><strong>WD14 自动打标：</strong>使用 SmilingWolf 系列 ONNX 模型，为每张图片生成同名 <code>.txt</code> caption（Danbooru 风格 tag，逗号分隔）。</p>
+                <p>选择 <strong>Caption 预设</strong> 可自动应用打标排除项（方案 3），并在打标后执行规则清洗（方案 2）。首次运行会从 HuggingFace 下载模型。</p>
+              </div>
+              <div class="path-field">
+                <label class="label">图片目录</label>
+                <div class="flex gap-2">
+                  <input type="text" id="tag-dir" class="input flex-1" />
+                  <button type="button" class="btn-secondary browse-btn">浏览</button>
+                </div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="label">Caption 预设</label>
+                  <select id="tag-caption-preset" class="input w-full"></select>
+                </div>
+                <div>
+                  <label class="label">WD14 模型</label>
+                  <select id="tag-model" class="input w-full">
+                    <option value="SmilingWolf/wd-vit-tagger-v3">wd-vit-v3（推荐·已内置）</option>
+                    <option value="SmilingWolf/wd-v1-4-swinv2-tagger-v2">wd-v1-4-swinv2-v2（需下载）</option>
+                    <option value="SmilingWolf/wd-v1-4-convnextv2-tagger-v2">wd-v1-4-convnextv2-v2（需下载）</option>
+                    <option value="SmilingWolf/wd-v1-4-convnext-tagger-v2">wd-v1-4-convnext-v2（需下载）</option>
+                    <option value="SmilingWolf/wd-v1-4-vit-tagger-v2">wd-v1-4-vit-v2（需下载）</option>
+                    <option value="SmilingWolf/wd-v1-4-moat-tagger-v2">wd-v1-4-moat-v2（需下载）</option>
+                    <option value="SmilingWolf/wd-convnext-tagger-v3">wd-convnext-v3（需下载）</option>
+                    <option value="SmilingWolf/wd-swinv2-tagger-v3">wd-swinv2-v3（需下载）</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="label">触发词（固定放最前，留空则用预设）</label>
+                <input type="text" id="tag-trigger" class="input w-full" placeholder="例如 Akali test" />
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="label">General 阈值</label>
+                  <input type="number" id="tag-general-thresh" class="input w-full" value="0.35" min="0" max="1" step="0.05" />
+                </div>
+                <div>
+                  <label class="label">Character 阈值</label>
+                  <input type="number" id="tag-char-thresh" class="input w-full" value="0.1" min="0" max="1" step="0.05" />
+                </div>
+              </div>
+              <div>
+                <label class="label">额外排除 tag（逗号分隔，会与预设合并）</label>
+                <input type="text" id="tag-undesired" class="input w-full" placeholder="留空则使用预设 tag_undesired" />
+              </div>
+              <div class="flex flex-wrap gap-4 text-sm">
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" id="tag-auto-clean" checked class="rounded" />
+                  打标后自动规则清洗
+                </label>
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" id="tag-recursive" class="rounded" />
+                  递归子目录
+                </label>
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" id="tag-remove-underscore" class="rounded" />
+                  下划线转空格
+                </label>
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" id="tag-append" class="rounded" />
+                  追加到已有 caption
+                </label>
+              </div>
+              <button type="button" id="btn-auto-tag" class="btn-primary">开始打标</button>
+            </div>
+          </section>
+
+          <!-- Caption 规则清洗 -->
+          <section id="page-captionClean" class="page-panel hidden space-y-4">
+            <div class="card space-y-4 p-5">
+              <div class="help-box">
+                <p><strong>Caption 规则清洗：</strong>按预设删除脏 tag（如 black_background）、补角色 tag、处理发色互斥，并标记需人工复核的异常文件。</p>
+                <p>预设文件位于 <code>configs/caption/*.toml</code>，可按角色复制修改。</p>
+              </div>
+              <div class="path-field">
+                <label class="label">Caption 目录（含 .txt）</label>
+                <div class="flex gap-2">
+                  <input type="text" id="clean-dir" class="input flex-1" />
+                  <button type="button" class="btn-secondary browse-btn">浏览</button>
+                </div>
+              </div>
+              <div>
+                <label class="label">清洗预设</label>
+                <select id="clean-preset" class="input w-full"></select>
+              </div>
+              <div>
+                <label class="label">触发词（覆盖预设，可选）</label>
+                <input type="text" id="clean-trigger" class="input w-full" placeholder="留空则用预设" />
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="label">额外删除 tag</label>
+                  <input type="text" id="clean-strip" class="input w-full" placeholder="逗号分隔" />
                 </div>
                 <div>
                   <label class="label">编号位数</label>
@@ -323,6 +497,163 @@
                 </div>
               </div>
               <button type="button" id="btn-convert" class="btn-primary">开始转换</button>
+            </div>
+          </section>
+
+          <!-- 转 ICO -->
+          <section id="page-toIco" class="page-panel hidden space-y-4">
+            <div class="card space-y-4 p-5">
+              <div class="help-box">
+                <p><strong>图片转 ICO：</strong>将 PNG、JPG、WebP 等批量转为 Windows 图标（<code>.ico</code>）。</p>
+                <p>每个 ICO 内嵌多种尺寸（默认 16～256px）；图片会先等比缩放并居中放入正方形透明画布，再生成各尺寸图层。</p>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div class="path-field">
+                  <label class="label">图片来源目录</label>
+                  <div class="flex gap-2">
+                    <input type="text" id="ico-input" class="input flex-1" placeholder="放入待转换图片的文件夹" />
+                    <button type="button" class="btn-secondary browse-btn">浏览</button>
+                  </div>
+                </div>
+                <div class="path-field">
+                  <label class="label">输出目录（留空则与原图同目录）</label>
+                  <div class="flex gap-2">
+                    <input type="text" id="ico-output" class="input flex-1" placeholder="可选" />
+                    <button type="button" class="btn-secondary browse-btn">浏览</button>
+                  </div>
+                </div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="label">内嵌尺寸（逗号分隔）</label>
+                  <input type="text" id="ico-sizes" class="input w-full" value="16,32,48,64,128,256" />
+                </div>
+                <div>
+                  <label class="label">主图画布边长</label>
+                  <input type="number" id="ico-max-canvas" class="input w-full" value="256" min="16" max="512" />
+                </div>
+              </div>
+              <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" id="ico-recursive" class="rounded" />
+                递归子文件夹
+              </label>
+              <button type="button" id="btn-to-ico" class="btn-primary">开始转换</button>
+            </div>
+          </section>
+
+          <!-- 图片压缩 -->
+          <section id="page-compress" class="page-panel hidden space-y-4">
+            <div class="card space-y-4 p-5">
+              <div class="help-box">
+                <p><strong>按目标大小压缩：</strong>文件夹内<strong>所有</strong> PNG/JPG/WebP/GIF/BMP/HEIC 等图片都会统一压缩，并转为所选输出格式。</p>
+                <p>不再因「已小于目标大小」而跳过。建议明确选择 JPEG/WebP/PNG；选「自动」时有透明通道→WebP，否则→JPEG。</p>
+              </div>
+              <div class="path-field">
+                <label class="label">目标文件夹</label>
+                <div class="flex gap-2">
+                  <input type="text" id="compress-input" class="input flex-1" />
+                  <button type="button" class="btn-secondary browse-btn">浏览</button>
+                </div>
+              </div>
+              <div id="compress-output-block" class="path-field hidden">
+                <label class="label">输出目录（可选，留空则为 目标文件夹/compressed）</label>
+                <div class="flex gap-2">
+                  <input type="text" id="compress-output" class="input flex-1" placeholder="可选" />
+                  <button type="button" class="btn-secondary browse-btn">浏览</button>
+                </div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label class="label">目标大小上限</label>
+                  <input type="number" id="compress-max-size" class="input w-full" value="500" min="1" step="1" />
+                </div>
+                <div>
+                  <label class="label">单位</label>
+                  <select id="compress-unit" class="input w-full">
+                    <option value="kb">KB</option>
+                    <option value="mb">MB</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label">输出格式</label>
+                  <select id="compress-format" class="input w-full">
+                    <option value="auto">自动</option>
+                    <option value="jpeg">JPEG</option>
+                    <option value="webp">WebP</option>
+                    <option value="png">PNG</option>
+                  </select>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="chip" data-preset-compress="500kb">500 KB</button>
+                <button type="button" class="chip" data-preset-compress="1mb">1 MB</button>
+                <button type="button" class="chip" data-preset-compress="2mb">2 MB</button>
+              </div>
+              <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" id="compress-in-place" checked class="rounded" />
+                原地压缩（直接处理该文件夹内图片）
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" id="compress-recursive" checked class="rounded" />
+                包含子文件夹
+              </label>
+              <button type="button" id="btn-compress" class="btn-primary">开始压缩</button>
+            </div>
+          </section>
+
+          <!-- 格式互转 -->
+          <section id="page-formatConvert" class="page-panel hidden space-y-4">
+            <div class="card space-y-4 p-5">
+              <div class="help-box">
+                <p><strong>格式互转：</strong>选择文件夹即可批量转换其中所有图片（默认含子文件夹），保持原始分辨率。</p>
+                <p>默认<strong>原地转换</strong>：新格式保存在原目录；扩展名变化时会删除原文件。取消原地模式可输出到其他目录。</p>
+              </div>
+              <div class="path-field">
+                <label class="label">目标文件夹</label>
+                <div class="flex gap-2">
+                  <input type="text" id="fmt-input" class="input flex-1" />
+                  <button type="button" class="btn-secondary browse-btn">浏览</button>
+                </div>
+              </div>
+              <div id="fmt-output-block" class="path-field hidden">
+                <label class="label">输出目录（可选，留空则为 目标文件夹/converted）</label>
+                <div class="flex gap-2">
+                  <input type="text" id="fmt-output" class="input flex-1" placeholder="可选" />
+                  <button type="button" class="btn-secondary browse-btn">浏览</button>
+                </div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label class="label">目标格式</label>
+                  <select id="fmt-target" class="input w-full">
+                    <option value="png">PNG</option>
+                    <option value="jpeg">JPEG (.jpg)</option>
+                    <option value="webp">WebP</option>
+                    <option value="bmp">BMP</option>
+                    <option value="gif">GIF</option>
+                    <option value="tiff">TIFF (.tif)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label">质量（JPEG/WebP）</label>
+                  <input type="number" id="fmt-quality" class="input w-full" value="90" min="1" max="100" />
+                </div>
+                <div class="flex flex-col justify-end gap-2 pb-1">
+                  <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" id="fmt-in-place" checked class="rounded" />
+                    原地转换
+                  </label>
+                  <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" id="fmt-recursive" checked class="rounded" />
+                    包含子文件夹
+                  </label>
+                  <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" id="fmt-skip-same" class="rounded" />
+                    跳过已是目标格式的文件
+                  </label>
+                </div>
+              </div>
+              <button type="button" id="btn-format-convert" class="btn-primary">开始互转</button>
             </div>
           </section>
 
@@ -523,7 +854,7 @@
               <div class="log-progress-bar"></div>
             </div>
             <div id="log-summary" class="mb-2 text-sm text-zinc-600 dark:text-zinc-400">等待任务…</div>
-            <pre id="log-body" class="log-pre max-h-80 overflow-y-auto rounded-lg bg-zinc-100 p-3 text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">在此显示处理结果与详情。</pre>
+            <pre id="log-body" class="log-pre max-h-80 overflow-y-auto rounded-lg bg-zinc-100 p-3 text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 log-body-normal">在此显示处理结果与详情。</pre>
           </div>
         </div>
       </main>

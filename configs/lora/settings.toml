@@ -1,0 +1,8 @@
+# lora-scripts 安装路径（请按本机实际路径修改）
+lora_scripts_root = "L:/SD/SD_Lora/lora-scripts-v1.12.0"
+
+# 训练时 accelerate 使用的 CPU 线程数（图片较多时可设为 8）
+cpu_threads = 8
+
+# GPU 序号，留空表示使用默认；多卡示例 "0,1"
+gpu_ids = ""

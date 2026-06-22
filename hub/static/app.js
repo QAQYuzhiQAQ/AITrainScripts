@@ -15,6 +15,18 @@ const PAGE_META = {
     title: '格式转换',
     subtitle: '多格式转 PNG；按目标像素总面积智能缩放（非固定输出宽高）',
   },
+  toIco: {
+    title: '转 ICO',
+    subtitle: 'PNG/JPG/WebP 等批量转为 Windows 多尺寸 .ico 图标',
+  },
+  compress: {
+    title: '图片压缩',
+    subtitle: '将图片压缩到指定 KB/MB 以内（质量优先，必要时缩小尺寸）',
+  },
+  formatConvert: {
+    title: '格式互转',
+    subtitle: 'PNG/JPEG/WebP/BMP/GIF/TIFF 互转，保持原始分辨率',
+  },
   resizeCanvas: {
     title: '画布填充',
     subtitle: '等比缩放后居中放入指定宽高的透明画布',
@@ -55,7 +67,6 @@ let browseTargetInput = null;
 let browseCurrentPath = null;
 let browseMode = 'dir';
 let renameMode = 'numbered';
-let wfRenameMode = 'numbered';
 let filterPreviewDone = false;
 let busy = false;
 
@@ -1568,6 +1579,219 @@ function initFilter() {
   });
 }
 
+function initAutoTag() {
+  const presetSelect = document.getElementById('tag-caption-preset');
+  const triggerInput = document.getElementById('tag-trigger');
+
+  async function fillTagPreset(presetId) {
+    try {
+      const data = await api(`/api/caption/presets/${encodeURIComponent(presetId)}`);
+      if (!triggerInput.value.trim() && data.trigger_word) {
+        triggerInput.value = data.trigger_word;
+      }
+    } catch {
+      /* 预设加载失败时保留用户输入 */
+    }
+  }
+
+  api('/api/caption/presets')
+    .then(async (data) => {
+      presetSelect.innerHTML = '';
+      for (const p of data.presets || []) {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name;
+        presetSelect.appendChild(opt);
+      }
+      if (!presetSelect.options.length) {
+        const opt = document.createElement('option');
+        opt.value = 'default';
+        opt.textContent = 'default';
+        presetSelect.appendChild(opt);
+      }
+      await fillTagPreset(presetSelect.value);
+    })
+    .catch(() => {
+      presetSelect.innerHTML = '<option value="default">default</option>';
+    });
+
+  presetSelect.addEventListener('change', () => fillTagPreset(presetSelect.value));
+
+  document.getElementById('btn-auto-tag').addEventListener('click', () => {
+    const image_dir = document.getElementById('tag-dir').value.trim();
+    if (!image_dir) {
+      appendLog('请填写图片目录', []);
+      return;
+    }
+    runJob('/api/jobs/auto-tag', {
+      image_dir,
+      repo_id: document.getElementById('tag-model').value,
+      batch_size: 4,
+      general_threshold: Number(document.getElementById('tag-general-thresh').value),
+      character_threshold: Number(document.getElementById('tag-char-thresh').value),
+      trigger_word: document.getElementById('tag-trigger').value.trim(),
+      undesired_tags: document.getElementById('tag-undesired').value.trim(),
+      caption_preset: presetSelect.value,
+      auto_clean: document.getElementById('tag-auto-clean').checked,
+      clean_preset: presetSelect.value,
+      recursive: document.getElementById('tag-recursive').checked,
+      remove_underscore: document.getElementById('tag-remove-underscore').checked,
+      append_tags: document.getElementById('tag-append').checked,
+    });
+  });
+}
+
+function initCaptionClean() {
+  const presetSelect = document.getElementById('clean-preset');
+  const triggerInput = document.getElementById('clean-trigger');
+
+  async function fillCleanPreset(presetId) {
+    try {
+      const data = await api(`/api/caption/presets/${encodeURIComponent(presetId)}`);
+      if (!triggerInput.value.trim() && data.trigger_word) {
+        triggerInput.placeholder = data.trigger_word || '留空则用预设';
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  api('/api/caption/presets')
+    .then(async (data) => {
+      presetSelect.innerHTML = '';
+      for (const p of data.presets || []) {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name;
+        presetSelect.appendChild(opt);
+      }
+      if (!presetSelect.options.length) {
+        const opt = document.createElement('option');
+        opt.value = 'default';
+        opt.textContent = 'default';
+        presetSelect.appendChild(opt);
+      }
+      await fillCleanPreset(presetSelect.value);
+    })
+    .catch(() => {
+      presetSelect.innerHTML = '<option value="default">default</option>';
+    });
+
+  presetSelect.addEventListener('change', () => fillCleanPreset(presetSelect.value));
+
+  document.getElementById('btn-caption-clean').addEventListener('click', () => {
+    const target_dir = document.getElementById('clean-dir').value.trim();
+    if (!target_dir) {
+      appendLog('请填写 Caption 目录', []);
+      return;
+    }
+    runJob('/api/jobs/caption-clean', {
+      target_dir,
+      preset: presetSelect.value,
+      recursive: document.getElementById('clean-recursive').checked,
+      dry_run: document.getElementById('clean-dry-run').checked,
+      trigger_word: document.getElementById('clean-trigger').value.trim(),
+      strip_tags: document.getElementById('clean-strip').value.trim(),
+      ensure_tags: document.getElementById('clean-ensure').value.trim(),
+    });
+  });
+}
+
+function initLoraTrain() {
+  const select = document.getElementById('lora-preset');
+
+  async function fillLoraFormFromPreset(presetId) {
+    try {
+      const { config } = await api(`/api/lora/presets/${encodeURIComponent(presetId)}`);
+      const res = String(config.resolution || '1024,1024').split(',');
+      document.getElementById('lora-train-dir').value = config.train_data_dir || '';
+      document.getElementById('lora-base-model').value = config.pretrained_model_name_or_path || '';
+      document.getElementById('lora-output-name').value = config.output_name || '';
+      document.getElementById('lora-output-dir').value = config.output_dir || '';
+      document.getElementById('lora-epochs').value = config.max_train_epochs ?? 10;
+      document.getElementById('lora-batch-size').value = config.train_batch_size ?? 2;
+      document.getElementById('lora-save-every').value = config.save_every_n_epochs ?? 2;
+      document.getElementById('lora-res-w').value = (res[0] || '1024').trim();
+      document.getElementById('lora-res-h').value = (res[1] || res[0] || '1024').trim();
+      document.getElementById('lora-dim').value = config.network_dim ?? 64;
+      document.getElementById('lora-alpha').value = config.network_alpha ?? 32;
+      document.getElementById('lora-unet-lr').value = config.unet_lr ?? config.learning_rate ?? 0.0001;
+      document.getElementById('lora-keep-tokens').value = config.keep_tokens ?? 1;
+      document.getElementById('lora-bucket-no-upscale').checked = Boolean(config.bucket_no_upscale);
+      document.getElementById('lora-full-bf16').checked = Boolean(config.full_bf16);
+    } catch (e) {
+      appendLog('加载预设失败', [String(e.message || e)]);
+    }
+  }
+
+  function collectLoraTrainBody(preset) {
+    const trainDir = document.getElementById('lora-train-dir').value.trim();
+    const baseModel = document.getElementById('lora-base-model').value.trim();
+    if (!trainDir || !baseModel) {
+      return null;
+    }
+    return {
+      preset,
+      train_data_dir: trainDir,
+      pretrained_model_name_or_path: baseModel,
+      output_name: document.getElementById('lora-output-name').value.trim(),
+      output_dir: document.getElementById('lora-output-dir').value.trim(),
+      max_train_epochs: Number(document.getElementById('lora-epochs').value),
+      train_batch_size: Number(document.getElementById('lora-batch-size').value),
+      save_every_n_epochs: Number(document.getElementById('lora-save-every').value),
+      resolution_width: Number(document.getElementById('lora-res-w').value),
+      resolution_height: Number(document.getElementById('lora-res-h').value),
+      network_dim: Number(document.getElementById('lora-dim').value),
+      network_alpha: Number(document.getElementById('lora-alpha').value),
+      unet_lr: Number(document.getElementById('lora-unet-lr').value),
+      keep_tokens: Number(document.getElementById('lora-keep-tokens').value),
+      bucket_no_upscale: document.getElementById('lora-bucket-no-upscale').checked,
+      full_bf16: document.getElementById('lora-full-bf16').checked,
+    };
+  }
+
+  api('/api/lora/presets')
+    .then(async (data) => {
+      select.innerHTML = '';
+      for (const p of data.presets || []) {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name;
+        select.appendChild(opt);
+      }
+      if (!select.options.length) {
+        const opt = document.createElement('option');
+        opt.value = 'morgana_star_nemesis';
+        opt.textContent = 'morgana_star_nemesis';
+        select.appendChild(opt);
+      }
+      await fillLoraFormFromPreset(select.value);
+    })
+    .catch(() => {
+      select.innerHTML = '<option value="morgana_star_nemesis">morgana_star_nemesis</option>';
+      fillLoraFormFromPreset('morgana_star_nemesis');
+    });
+
+  select.addEventListener('change', () => fillLoraFormFromPreset(select.value));
+
+  document.getElementById('btn-lora-train').addEventListener('click', () => {
+    const preset = select.value;
+    if (!preset) {
+      appendLog('请选择训练预设', []);
+      return;
+    }
+    if (!confirm('即将启动 LoRA 训练，过程可能耗时较长，是否继续？')) {
+      return;
+    }
+    const body = collectLoraTrainBody(preset);
+    if (!body) {
+      appendLog('请填写训练数据目录与底模路径', []);
+      return;
+    }
+    runJobLive('/api/jobs/lora-train', body);
+  });
+}
+
 function initRename() {
   document.querySelectorAll('.rename-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
@@ -1676,6 +1900,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initVideo();
   initVideoBatch();
   initConvert();
+  initToIco();
+  initCompress();
+  initFormatConvert();
   initResize();
   initCrop();
   initFilter();

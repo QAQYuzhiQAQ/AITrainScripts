@@ -1,0 +1,16 @@
+# Akali LoRA Caption 清洗预设
+
+name = "Akali"
+trigger_word = "Akali test"
+character_tag = "akali"
+strip_tags = "black_background, simple_background, soraka, gwen, ahri, lux, miss_fortune, katarina, 1boy, male_focus"
+ensure_tags = "akali"
+expected_gender = "1girl"
+remove_if_missing = "1girl"
+flag_if_present = "soraka, gwen, 1boy, male_focus"
+mutual_exclude = "red_hair:brown_hair|pink_hair|blonde_hair, blue_hair:green_hair|purple_hair"
+dedupe = true
+separator = ", "
+
+# 打标阶段排除（方案 3：LOL 误识别 + 背景 + 低质量）
+tag_undesired = "black_background, simple_background, soraka, gwen, ahri, lux, miss_fortune, katarina, 1boy, male_focus, lowres, bad_quality, worst_quality, watermark, signature, artist_name"

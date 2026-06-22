@@ -126,6 +126,13 @@ cp .env.example .env
 ### Hub
 
 侧栏 **「豆包视频」** → 提示词 + 可选参考素材 URL → 提交。通常需 1–5 分钟；成功后可获得视频链接（**24 小时内有效**），可填本地路径自动下载。
+## WD14 自动打标
+
+为 LoRA 训练集批量生成 Kohya 兼容的 `.txt` caption（Danbooru 风格 tag）。逻辑提取自 [lora-scripts](https://github.com/Akegarasu/lora-scripts) 的 WD14 tagger。
+
+### Hub 操作
+
+侧栏 **「自动打标」** → 选择图片目录 → 填写触发词 → **开始打标**。
 
 ### 命令行
 
@@ -138,6 +145,71 @@ python generate_video.py --prompt "描述镜头与内容…" --ratio 16:9 --dura
 ```bash
 python generate_video.py --prompt "..." --refs '[{"type":"image_url","url":"https://...","role":"reference_image"}]'
 ```
+python auto_tag_wd14.py --dir "C:/path/to/images" --trigger "morgana_sn" --recursive
+```
+
+| 参数 | 说明 |
+|------|------|
+| `--trigger` | 固定触发词，写入 caption 最前 |
+| `--general-threshold` | 通用 tag 阈值（默认 0.35） |
+| `--character-threshold` | 角色 tag 阈值（默认 0.1） |
+| `--append` | 追加到已有 caption，不覆盖 |
+| `--model` | HuggingFace 模型 repo_id |
+
+### 内置模型（已从 lora-scripts 复制，约 361 MB）
+
+默认模型 `wd-vit-v3` 已放在 `wd14_tagger_model/SmilingWolf_wd-vit-tagger-v3/`，**开箱即用、无需下载**（该目录已在 `.gitignore` 中，不进 Git）。
+
+Hub 下拉框中带 **「已内置」** 的模型可直接使用；带 **「需下载」** 的会在首次使用时从 HuggingFace 自动拉取。
+
+### 推荐 LoRA 数据流
+
+1. **LoRA 工作流** — 图片缩放/转 PNG + 重命名  
+2. **自动打标** — 生成/补充 `.txt`  
+3. 手动微调 caption（可选）  
+4. 送入 Kohya / lora-scripts 训练
+
+---
+
+## LoRA 训练（调用 lora-scripts）
+
+无需单独打开 lora-scripts GUI，从本项目读取预设并启动训练。
+
+### 配置文件
+
+| 文件 | 说明 |
+|------|------|
+| `configs/lora/settings.toml` | lora-scripts 安装路径、CPU 线程、GPU 序号 |
+| `configs/lora/morgana_star_nemesis.toml` | 训练超参预设（可复制的模板） |
+| `configs/lora/runtime/` | 运行时生成的临时配置（自动生成） |
+| `logs/lora_train/` | 训练日志（自动生成） |
+
+首次使用请确认 `settings.toml` 中 `lora_scripts_root` 指向本机 lora-scripts 目录。
+
+### Hub 操作
+
+侧栏 **「LoRA 训练」** → 选择预设（自动填充表单）→ 修改参数 → **开始训练**。
+
+**页面可编辑的关键参数：**
+
+| 分组 | 参数 |
+|------|------|
+| 路径与输出 | 训练数据目录、底模路径、output_name、output_dir |
+| 训练规模 | max_train_epochs、batch_size、save_every_n_epochs |
+| LoRA 与分辨率 | 分辨率宽×高、network_dim、network_alpha |
+| 学习率与 Caption | unet_lr、keep_tokens、bucket_no_upscale、full_bf16 |
+
+修改仅作用于本次训练；切换预设会重新加载 TOML 默认值。持久修改请编辑 `configs/lora/*.toml`。
+
+### 命令行
+
+```bash
+python train_lora.py
+python train_lora.py --preset morgana_star_nemesis --train-data-dir "C:/path/to/dataset"
+python train_lora.py --list-presets
+```
+
+训练在后台 subprocess 中执行，逻辑与 lora-scripts GUI 的 `/api/run` 一致（`accelerate launch` + `sdxl_train_network.py --config_file`）。
 
 ---
 
@@ -157,7 +229,10 @@ AITrainScripts/
 │   ├── crop_2k.py          # 2K 区域裁剪
 │   ├── filter_2k.py        # 按尺寸筛选删除（支持 dry_run）
 │   ├── rename.py           # 批量重命名、联动 caption
+│   ├── tagger/             # WD14 自动打标
+│   ├── lora_train/         # 调用 lora-scripts 训练
 │   └── workflow.py         # LoRA 一键工作流
+├── configs/lora/           # LoRA 训练预设与 settings
 ├── Img/                    # 独立脚本（调用 img_tools）
 ├── Text/xiaoshuo/          # 小说数据处理流水线
 ├── video_tools/            # 豆包 Seedance 视频生成
@@ -166,6 +241,8 @@ AITrainScripts/
 ├── prepare_dataset.py      # LoRA 工作流 CLI
 ├── generate_video.py       # 视频生成 CLI
 ├── .env.example            # API Key 模板（复制为 .env）
+├── auto_tag_wd14.py        # WD14 自动打标 CLI
+├── train_lora.py           # LoRA 训练 CLI
 ├── start_hub.py            # Hub 一键启动（跨平台）
 ├── start_hub.bat / .command / .sh
 └── requirements.txt

@@ -266,6 +266,14 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+.log-body-training {
+  max-height: 28rem;
+}
+
+.train-progress-bar {
+  min-width: 0;
+}
+
 .modal {
   position: fixed;
   inset: 0;
