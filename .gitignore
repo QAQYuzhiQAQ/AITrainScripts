@@ -21,6 +21,10 @@ youtube_mp3/
 .DS_Store
 Thumbs.db
 
+# Hub 暂存上传
+hub/.staging/
+hub/.job_history.json
+
 # 敏感信息
 .env
 *.key

@@ -25,15 +25,33 @@
     <aside class="flex w-56 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
       <div class="border-b border-zinc-200 px-4 py-5 dark:border-zinc-800">
         <h1 class="text-sm font-semibold tracking-tight">AITrainScripts</h1>
-        <p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">图片预处理 Hub</p>
+        <p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">AI 训练与媒体工具</p>
       </div>
-      <nav class="flex-1 space-y-0.5 p-2" id="sidebar-nav">
-        <button data-page="workflow" class="nav-item w-full nav-item-highlight">LoRA 工作流</button>
-        <button data-page="convert" class="nav-item w-full">格式转换</button>
-        <button data-page="resizeCanvas" class="nav-item w-full">画布填充</button>
-        <button data-page="crop2k" class="nav-item w-full">区域裁剪</button>
-        <button data-page="filter2k" class="nav-item w-full">尺寸筛选</button>
-        <button data-page="rename" class="nav-item w-full">批量重命名</button>
+      <nav class="flex-1 overflow-y-auto p-2" id="sidebar-nav">
+        <div class="nav-section" data-section="image">
+          <button type="button" class="nav-section-toggle" aria-expanded="true">
+            <span>图片</span>
+            <svg class="nav-section-chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.94a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+          </button>
+          <div class="nav-section-items">
+            <button type="button" data-page="workflow" class="nav-item w-full nav-item-highlight">LoRA 工作流</button>
+            <button type="button" data-page="convert" class="nav-item w-full">格式转换</button>
+            <button type="button" data-page="resizeCanvas" class="nav-item w-full">画布填充</button>
+            <button type="button" data-page="crop2k" class="nav-item w-full">区域裁剪</button>
+            <button type="button" data-page="filter2k" class="nav-item w-full">尺寸筛选</button>
+            <button type="button" data-page="rename" class="nav-item w-full">批量重命名</button>
+          </div>
+        </div>
+        <div class="nav-section" data-section="av">
+          <button type="button" class="nav-section-toggle" aria-expanded="true">
+            <span>音视频</span>
+            <svg class="nav-section-chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.94a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+          </button>
+          <div class="nav-section-items">
+            <button type="button" data-page="video" class="nav-item w-full">豆包视频</button>
+            <button type="button" data-page="mp4ToMp3" class="nav-item w-full">MP4 转 MP3</button>
+          </div>
+        </div>
       </nav>
     </aside>
 
@@ -136,6 +154,125 @@
                 同步重命名配对的 .txt / .caption（LoRA 打标文件）
               </label>
               <button type="button" id="btn-workflow" class="btn-primary w-full sm:w-auto">运行完整工作流</button>
+            </div>
+          </section>
+
+          <!-- 豆包视频 -->
+          <section id="page-video" class="page-panel hidden space-y-4">
+            <div class="card space-y-4 p-5">
+              <div class="help-box">
+                <p>调用火山方舟 <strong>Seedance 1.5-pro</strong>（默认 <strong>480p</strong>，约 0.4–0.8 元/5 秒）。参考素材可直接<strong>粘贴本机绝对路径</strong>（如 <code class="text-xs">/Users/你/Pictures/photo.jpg</code>），失焦后自动校验；也支持拖放、浏览或公网 <code class="text-xs">https://</code> 链接。HEIC 等格式会自动转为 JPG。</p>
+                <p>请先在项目根目录配置 <code class="text-xs">.env</code>：<code class="text-xs">ARK_API_KEY=你的密钥</code>（可复制 <code class="text-xs">.env.example</code>）。顶栏绿点表示密钥已配置。</p>
+                <p>生成成功后视频链接 <strong>24 小时内有效</strong>，建议填写保存路径立即下载。</p>
+                <p>画幅选 <strong>智能适配</strong> 时，方舟会根据参考图自动匹配最接近的标准比例；若指定固定比例，与图片不一致时会<strong>居中裁切</strong>。</p>
+              </div>
+              <div>
+                <label class="label">提示词（必填）</label>
+                <textarea id="video-prompt" class="input min-h-[120px] w-full resize-y" placeholder="描述镜头、节奏、旁白与参考素材用法…"></textarea>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="label">模型</label>
+                  <input type="text" id="video-model" class="input w-full" value="doubao-seedance-1-5-pro-251215" />
+                </div>
+                <div>
+                  <label class="label">清晰度</label>
+                  <select id="video-resolution" class="input w-full">
+                    <option value="480p" selected>480p（省钱，推荐）</option>
+                    <option value="720p">720p</option>
+                    <option value="1080p">1080p</option>
+                  </select>
+                  <p class="mt-1 text-xs text-zinc-500">1.5-pro 官方价：480p 5 秒约 0.4 元（无声）/ 0.8 元（有声）</p>
+                </div>
+                <div>
+                  <label class="label">画幅比例</label>
+                  <select id="video-ratio" class="input w-full">
+                    <option value="adaptive" selected>智能适配（推荐）</option>
+                    <option value="16:9">16:9 横屏</option>
+                    <option value="9:16">9:16 竖屏</option>
+                    <option value="1:1">1:1 方形</option>
+                    <option value="4:3">4:3 横屏</option>
+                    <option value="3:4">3:4 竖屏</option>
+                    <option value="21:9">21:9 超宽</option>
+                  </select>
+                  <p id="video-ratio-hint" class="mt-1 text-xs text-zinc-500">有参考图时按图片选最接近的标准比例</p>
+                </div>
+                <div>
+                  <label class="label">时长（秒）</label>
+                  <input type="number" id="video-duration" class="input w-full" value="5" min="4" max="15" step="1" />
+                  <p id="video-duration-hint" class="mt-1 text-xs text-zinc-500">纯文生视频支持 4–15 秒；图生视频常用 5 / 10 / 15</p>
+                </div>
+                <div class="flex flex-col justify-end gap-2 pb-1">
+                  <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" id="video-generate-audio" checked class="rounded" />
+                    生成音频
+                  </label>
+                  <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" id="video-watermark" class="rounded" />
+                    水印
+                  </label>
+                </div>
+              </div>
+              <div>
+                <div class="mb-2 flex items-center justify-between">
+                  <label class="label mb-0">参考素材（可选）</label>
+                  <button type="button" id="video-add-ref" class="btn-secondary text-xs">+ 添加</button>
+                </div>
+                <div id="video-refs-header" class="video-ref-header hidden grid gap-2 px-1 text-xs text-zinc-500 sm:grid-cols-12">
+                  <span class="sm:col-span-2">类型</span>
+                  <span class="sm:col-span-6">文件</span>
+                  <span class="sm:col-span-3">用途</span>
+                  <span class="sm:col-span-1"></span>
+                </div>
+                <div id="video-refs" class="space-y-2"></div>
+              </div>
+              <div>
+                <label class="label">保存到本地（可选）</label>
+                <input type="text" id="video-output" class="input w-full" placeholder="目录或文件，如 /Users/你/Downloads 或 …/out.mp4" />
+                <p class="mt-1 text-xs text-zinc-500">可填文件夹（自动命名 seedance_任务ID.mp4）或完整 .mp4 路径；留空则仅返回在线链接</p>
+              </div>
+              <button type="button" id="btn-video" class="btn-primary">提交单个任务</button>
+              <p class="text-xs text-zinc-500">单个任务通常需 1–5 分钟；批量任务见下方队列。</p>
+            </div>
+
+            <div class="card space-y-4 p-5">
+              <div class="help-box">
+                <p><strong>批量队列：</strong>共用上方提示词与参数，<strong>每张参考图单独生成一个视频</strong>，一次提交多个任务。后台最多 4 路并行，其余排队。</p>
+                <p>提交后可关闭页面；任务记录在服务端保留，稍后打开本页点击「刷新队列」查看进度与下载链接。</p>
+              </div>
+              <div>
+                <label class="label">批量参考图（一图一视频）</label>
+                <div id="video-batch-drop" class="ref-drop">拖入多张图片，或点击选择</div>
+                <input type="file" id="video-batch-files" class="hidden" accept="image/*" multiple />
+                <ul id="video-batch-list" class="mt-2 space-y-1 text-sm text-zinc-600 dark:text-zinc-400"></ul>
+                <div class="mt-2 flex gap-1">
+                  <input type="text" id="video-batch-path" class="input min-w-0 flex-1 text-sm" placeholder="或填写本机图片路径后添加" />
+                  <button type="button" id="btn-video-batch-add-path" class="btn-secondary shrink-0 text-xs">添加路径</button>
+                </div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="label">参考图用途（批量）</label>
+                  <select id="video-batch-role" class="input w-full">
+                    <option value="reference_image">参考图</option>
+                    <option value="first_frame">首帧</option>
+                    <option value="last_frame">尾帧</option>
+                  </select>
+                </div>
+                <div class="flex items-end gap-2 pb-1">
+                  <button type="button" id="btn-video-batch" class="btn-primary flex-1">批量提交</button>
+                  <button type="button" id="btn-video-batch-clear" class="btn-secondary">清空</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card space-y-3 p-5">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-medium">视频任务队列</h3>
+                <button type="button" id="btn-video-queue-refresh" class="btn-secondary text-xs">刷新队列</button>
+              </div>
+              <p class="text-xs text-zinc-500">显示最近 40 条视频任务（含批量）。Hub 重启后仍可从历史文件恢复已完成记录。</p>
+              <div id="video-queue-list" class="queue-list max-h-80 space-y-2 overflow-y-auto text-sm"></div>
             </div>
           </section>
 
@@ -341,13 +478,52 @@
             </div>
           </section>
 
-          <div class="card p-5">
+          <!-- MP4 转 MP3 -->
+          <section id="page-mp4ToMp3" class="page-panel hidden space-y-4">
+            <div class="card space-y-4 p-5">
+              <div class="help-box">
+                <p>从 MP4（及 .m4v / .mov）中提取音频，批量输出为 MP3。依赖本机已安装 <strong>ffmpeg</strong>（顶栏绿点表示可用）。</p>
+                <p>可填写<strong>单个视频文件</strong>或<strong>文件夹</strong>；未指定输出目录时，MP3 与源视频同目录同名。</p>
+              </div>
+              <div class="path-field">
+                <label class="label">输入路径（文件或文件夹）</label>
+                <div class="flex gap-2">
+                  <input type="text" id="mp3-input" class="input flex-1" placeholder="/path/to/video.mp4 或 /path/to/videos" />
+                  <button type="button" class="btn-secondary browse-btn">目录</button>
+                  <button type="button" class="btn-secondary browse-file-btn">文件</button>
+                </div>
+              </div>
+              <div class="path-field">
+                <label class="label">输出目录（可选）</label>
+                <div class="flex gap-2">
+                  <input type="text" id="mp3-output" class="input flex-1" placeholder="留空则与源文件同目录" />
+                  <button type="button" class="btn-secondary browse-btn">浏览</button>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-4 text-sm">
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" id="mp3-recursive" class="rounded" />
+                  递归子文件夹（输入为目录时）
+                </label>
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" id="mp3-overwrite" class="rounded" />
+                  覆盖已存在的 MP3
+                </label>
+              </div>
+              <button type="button" id="btn-mp3" class="btn-primary">开始转换</button>
+            </div>
+          </section>
+
+          <div id="log-panel" class="card p-5">
             <div class="mb-2 flex items-center justify-between">
               <h3 class="text-sm font-medium">任务日志</h3>
               <button type="button" id="log-clear" class="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300">清空</button>
             </div>
+            <div id="log-progress-wrap" class="log-progress-wrap hidden mb-2">
+              <div class="log-progress-bar"></div>
+            </div>
             <div id="log-summary" class="mb-2 text-sm text-zinc-600 dark:text-zinc-400">等待任务…</div>
-            <pre id="log-body" class="log-pre max-h-64 overflow-y-auto rounded-lg bg-zinc-100 p-3 text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">在此显示处理结果与详情。</pre>
+            <pre id="log-body" class="log-pre max-h-80 overflow-y-auto rounded-lg bg-zinc-100 p-3 text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">在此显示处理结果与详情。</pre>
           </div>
         </div>
       </main>
@@ -358,13 +534,14 @@
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-panel card max-h-[70vh] w-full max-w-md overflow-hidden p-0">
       <div class="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-700">
-        <span class="text-sm font-medium">选择文件夹</span>
+        <span id="browse-title" class="text-sm font-medium">选择文件夹</span>
         <button type="button" class="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200" data-close-modal>&times;</button>
       </div>
       <p id="browse-current" class="truncate px-4 py-2 text-xs text-zinc-500"></p>
       <ul id="browse-list" class="max-h-64 overflow-y-auto border-t border-zinc-200 dark:border-zinc-700"></ul>
       <div class="border-t border-zinc-200 p-3 dark:border-zinc-700">
         <button type="button" id="browse-select" class="btn-primary w-full">使用当前目录</button>
+        <p id="browse-hint" class="mt-2 hidden text-center text-xs text-zinc-500"></p>
       </div>
     </div>
   </div>

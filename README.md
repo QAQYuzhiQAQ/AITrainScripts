@@ -36,16 +36,20 @@ python -m hub
 
 ## Hub 功能一览
 
-| 页面 | 功能 |
-|------|------|
-| **LoRA 工作流** | 一键：来源目录 → 缩放/转 PNG → 输出目录 → 批量重命名（可联动 `.txt` / `.caption`） |
-| 格式转换 | 多格式 → PNG；按**目标像素总面积**智能匹配 64 倍数画布（非固定输出宽高） |
-| 画布填充 | 等比缩放后居中放入**自定义宽高**透明画布（输出尺寸与输入一致） |
-| 区域裁剪 | 递归处理 2560×1440 PNG，固定区域裁剪并保持目录结构 |
-| 尺寸筛选 | 仅保留指定宽高；先预览再删除（不可逆） |
-| 批量重命名 | 前缀+补零编号 / 纯序号；支持预览；可同步标注文件 |
+侧栏按 **图片 / 音视频** 两组折叠导航：
 
-顶栏圆点表示依赖状态（Pillow / HEIF / natsort）。目录浏览限制在用户主目录内。
+| 分组 | 页面 | 功能 |
+|------|------|------|
+| **图片** | LoRA 工作流 | 一键：来源目录 → 缩放/转 PNG → 输出 → 重命名 |
+| | 格式转换 | 多格式 → PNG；按目标像素总面积智能匹配 64 倍数画布 |
+| | 画布填充 | 等比缩放后居中放入自定义宽高透明画布 |
+| | 区域裁剪 | 2560×1440 PNG 固定区域裁剪 |
+| | 尺寸筛选 | 仅保留指定宽高；先预览再删除 |
+| | 批量重命名 | 前缀+补零编号 / 纯序号；可同步 `.txt` / `.caption` |
+| **音视频** | 豆包视频 | Seedance 1.5-pro 视频生成（默认 480p） |
+| | MP4 转 MP3 | 批量从 MP4 提取 MP3（需本机 ffmpeg） |
+
+顶栏圆点表示依赖状态（Pillow / HEIF / natsort / **ffmpeg** / ARK Key）。目录浏览限制在用户主目录内。
 
 备用桌面 GUI：`python Img/image_converter.py`（tkinter，逻辑与 Hub「格式转换」相同）。
 
@@ -105,6 +109,38 @@ run_prepare_workflow(
 
 ---
 
+## 豆包 Seedance 视频生成
+
+基于火山方舟 API，默认模型 `doubao-seedance-1-5-pro-251215`，默认分辨率 **480p**（约 0.4–0.8 元/5 秒，比 2.0 720p 便宜很多）。
+
+### 配置 API Key
+
+```bash
+cp .env.example .env
+# 编辑 .env：
+# ARK_API_KEY=你的密钥
+```
+
+`.env` 已加入 `.gitignore`，不会提交到 Git。
+
+### Hub
+
+侧栏 **「豆包视频」** → 提示词 + 可选参考素材 URL → 提交。通常需 1–5 分钟；成功后可获得视频链接（**24 小时内有效**），可填本地路径自动下载。
+
+### 命令行
+
+```bash
+python generate_video.py --prompt "描述镜头与内容…" --ratio 16:9 --duration 11 -o ./out.mp4
+```
+
+多模态参考：
+
+```bash
+python generate_video.py --prompt "..." --refs '[{"type":"image_url","url":"https://...","role":"reference_image"}]'
+```
+
+---
+
 ## 项目结构
 
 ```
@@ -124,7 +160,12 @@ AITrainScripts/
 │   └── workflow.py         # LoRA 一键工作流
 ├── Img/                    # 独立脚本（调用 img_tools）
 ├── Text/xiaoshuo/          # 小说数据处理流水线
+├── video_tools/            # 豆包 Seedance 视频生成
+│   ├── config.py           # ARK_API_KEY 读取
+│   └── doubao_seedance.py
 ├── prepare_dataset.py      # LoRA 工作流 CLI
+├── generate_video.py       # 视频生成 CLI
+├── .env.example            # API Key 模板（复制为 .env）
 ├── start_hub.py            # Hub 一键启动（跨平台）
 ├── start_hub.bat / .command / .sh
 └── requirements.txt
@@ -179,6 +220,7 @@ pip install -r requirements.txt
 | Pillow | 图像处理 |
 | natsort | 自然排序重命名 |
 | fastapi, uvicorn | Web Hub |
+| python-dotenv | 从 `.env` 加载 `ARK_API_KEY` |
 | pillow-heif（可选） | HEIC/HEIF 支持 |
 
 `youtube_to_mp3.py` 另需系统安装 **FFmpeg** 与 **yt-dlp**（见脚本注释）。
@@ -193,3 +235,4 @@ pip install -r requirements.txt
 - 跨平台启动：`start_hub.py` / `.bat` / `.command` / `.sh`
 - 画布填充、尺寸筛选支持**自定义宽高**；重命名支持**联动 caption**
 - 格式转换说明：基准宽×高为**目标面积**，非固定输出尺寸
+- 新增 **豆包 Seedance 视频生成**（Hub + CLI，`video_tools/`）

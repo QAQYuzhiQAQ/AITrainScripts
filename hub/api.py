@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import re
+import uuid
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from hub.browse import browse_directory
+from audio_tools.mp4_to_mp3 import is_ffmpeg_available, mp4_to_mp3_batch
+from hub.browse import browse_directory, browse_media
 from hub.config import HOST, PORT
 from hub.jobs import job_manager
 from img_tools.common import JobResult, register_heif_opener
@@ -21,8 +24,19 @@ from img_tools.filter_2k import filter_2k_images
 from img_tools.rename import batch_rename_numbered, rename_sequential
 from img_tools.resize import resize_png_center_batch
 from img_tools.workflow import RenameMode, ResizeMode, WorkflowRenameOptions, run_prepare_workflow
+from video_tools.config import is_api_key_configured
+from video_tools.doubao_seedance import (
+    DEFAULT_MODEL,
+    DEFAULT_RATIO,
+    DEFAULT_RESOLUTION,
+    MediaReference,
+    SeedanceRequest,
+    run_seedance_generation,
+)
+from video_tools.media_resolve import MAX_BYTES, guess_ref_type, validate_local_media
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+STAGING_DIR = Path(__file__).resolve().parent / ".staging"
 
 app = FastAPI(title="AITrainScripts Hub", version="1.0.0")
 
@@ -81,6 +95,52 @@ class RenameRequest(BaseModel):
     sync_captions: bool = False
 
 
+class Mp4ToMp3Request(BaseModel):
+    input_path: str = Field(..., min_length=1)
+    output_dir: str | None = None
+    recursive: bool = False
+    overwrite: bool = False
+
+
+class VideoReferenceItem(BaseModel):
+    type: Literal["image_url", "video_url", "audio_url"]
+    url: str
+    role: str | None = None
+
+
+class VideoGenerateRequest(BaseModel):
+    prompt: str = Field(..., min_length=1)
+    references: list[VideoReferenceItem] = Field(default_factory=list)
+    model: str = DEFAULT_MODEL
+    ratio: str = DEFAULT_RATIO
+    resolution: str = DEFAULT_RESOLUTION
+    duration: int = Field(5, ge=-1, le=15)
+    generate_audio: bool = True
+    watermark: bool = False
+    output_path: str | None = None
+
+
+class VideoBatchItem(BaseModel):
+    """批量队列中的单条：通常仅一张参考图对应一个视频。"""
+
+    url: str = Field(..., min_length=1)
+    label: str | None = None
+    role: str = "reference_image"
+
+
+class VideoBatchRequest(BaseModel):
+    prompt: str = Field(..., min_length=1)
+    items: list[VideoBatchItem] = Field(..., min_length=1, max_length=30)
+    model: str = DEFAULT_MODEL
+    ratio: str = DEFAULT_RATIO
+    resolution: str = DEFAULT_RESOLUTION
+    duration: int = Field(5, ge=-1, le=15)
+    generate_audio: bool = True
+    watermark: bool = False
+    output_dir: str | None = None
+    output_path: str | None = None
+
+
 class WorkflowRequest(BaseModel):
     source_dir: str
     output_dir: str
@@ -124,6 +184,8 @@ def health() -> dict[str, Any]:
             "pillow": pillow_ok,
             "pillow_heif": heif_ok,
             "natsort": natsort_ok,
+            "ffmpeg": is_ffmpeg_available(),
+            "ark_api_key": is_api_key_configured(),
         },
     }
 
@@ -131,6 +193,134 @@ def health() -> dict[str, Any]:
 @app.get("/api/browse")
 def api_browse(path: str | None = Query(None)) -> dict:
     return browse_directory(path)
+
+
+@app.get("/api/browse/media")
+def api_browse_media(path: str | None = Query(None)) -> dict:
+    return browse_media(path)
+
+
+@app.get("/api/video/check-media")
+def check_video_media(
+    path: str = Query(..., min_length=1),
+    ref_type: str = Query("image_url"),
+) -> dict[str, Any]:
+    """校验用户填写的本机媒体路径是否存在、可读。"""
+    if ref_type not in MAX_BYTES:
+        raise HTTPException(status_code=400, detail=f"不支持的素材类型: {ref_type}")
+    try:
+        return validate_local_media(path, ref_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/api/video/stage-media")
+async def stage_video_media(
+    file: UploadFile = File(...),
+    ref_type: str = Form("image_url"),
+) -> dict[str, Any]:
+    """浏览器上传的参考素材暂存到本机，提交任务时再转为 data URI 发给方舟 API。"""
+    if ref_type not in MAX_BYTES:
+        raise HTTPException(status_code=400, detail=f"不支持的素材类型: {ref_type}")
+
+    original = Path(file.filename or "upload").name
+    suffix = Path(original).suffix.lower() or ".bin"
+    STAGING_DIR.mkdir(parents=True, exist_ok=True)
+    dest = STAGING_DIR / f"{uuid.uuid4().hex}{suffix}"
+
+    max_bytes = MAX_BYTES[ref_type]
+    written = 0
+    try:
+        with dest.open("wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                written += len(chunk)
+                if written > max_bytes:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"文件过大，{ref_type} 上限 {max_bytes // (1024 * 1024)} MB",
+                    )
+                out.write(chunk)
+    except HTTPException:
+        dest.unlink(missing_ok=True)
+        raise
+
+    detected = guess_ref_type(dest)
+    return {
+        "path": str(dest.resolve()),
+        "name": original,
+        "size": written,
+        "detected_type": detected,
+    }
+
+
+def _safe_batch_label(name: str | None, index: int) -> str:
+    stem = Path(name).stem if name else f"item-{index + 1}"
+    safe = re.sub(r"[^\w\-.]+", "_", stem, flags=re.UNICODE).strip("._")
+    return safe[:60] or f"item-{index + 1}"
+
+
+def _resolve_batch_output_path(
+    *,
+    output_dir: str | None,
+    output_path: str | None,
+    label: str,
+    index: int,
+) -> str | None:
+    if output_dir and output_dir.strip():
+        return str(Path(output_dir.strip()).expanduser() / f"seedance_{label}.mp4")
+    if output_path and output_path.strip():
+        raw = output_path.strip()
+        path = Path(raw).expanduser()
+        if path.is_dir() or raw.endswith(("/", "\\")):
+            return str(path / f"seedance_{label}.mp4")
+    return None
+
+
+def _submit_video_job(
+    *,
+    prompt: str,
+    references: list[MediaReference],
+    model: str,
+    ratio: str,
+    resolution: str,
+    duration: int,
+    generate_audio: bool,
+    watermark: bool,
+    output_path: str | None,
+    label: str | None = None,
+    batch_id: str | None = None,
+) -> str:
+    req = SeedanceRequest(
+        prompt=prompt,
+        references=references,
+        model=model,
+        ratio=ratio,
+        resolution=resolution,
+        duration=duration,
+        generate_audio=generate_audio,
+        watermark=watermark,
+    )
+
+    def run(report) -> JobResult:
+        return run_seedance_generation(req, output_path=output_path, on_progress=report)
+
+    return job_manager.submit(
+        "video-generate",
+        run,
+        with_progress=True,
+        label=label,
+        batch_id=batch_id,
+    )
+
+
+@app.get("/api/jobs")
+def list_jobs(
+    job_type: str | None = Query(None),
+    batch_id: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+) -> dict[str, Any]:
+    records = job_manager.list_jobs(job_type=job_type, batch_id=batch_id, limit=limit)
+    return {"jobs": [job_manager.to_dict(r) for r in records]}
 
 
 @app.get("/api/jobs/{job_id}")
@@ -223,6 +413,94 @@ def job_rename(body: RenameRequest) -> dict:
 
     job_id = job_manager.submit("rename", run)
     return {"job_id": job_id}
+
+
+@app.post("/api/jobs/mp4-to-mp3")
+def job_mp4_to_mp3(body: Mp4ToMp3Request) -> dict:
+    def run() -> JobResult:
+        return mp4_to_mp3_batch(
+            body.input_path,
+            body.output_dir,
+            recursive=body.recursive,
+            overwrite=body.overwrite,
+        )
+
+    job_id = job_manager.submit("mp4-to-mp3", run)
+    return {"job_id": job_id}
+
+
+@app.post("/api/jobs/video-generate")
+def job_video_generate(body: VideoGenerateRequest) -> dict:
+    if not is_api_key_configured():
+        raise HTTPException(
+            status_code=400,
+            detail="未配置 ARK_API_KEY。请在项目根目录创建 .env 并填入密钥（参考 .env.example）",
+        )
+
+    refs = [
+        MediaReference(type=r.type, url=r.url, role=r.role) for r in body.references if r.url.strip()
+    ]
+    job_id = _submit_video_job(
+        prompt=body.prompt,
+        references=refs,
+        model=body.model,
+        ratio=body.ratio,
+        resolution=body.resolution,
+        duration=body.duration,
+        generate_audio=body.generate_audio,
+        watermark=body.watermark,
+        output_path=body.output_path,
+    )
+    return {"job_id": job_id}
+
+
+@app.post("/api/jobs/video-generate-batch")
+def job_video_generate_batch(body: VideoBatchRequest) -> dict[str, Any]:
+    if not is_api_key_configured():
+        raise HTTPException(
+            status_code=400,
+            detail="未配置 ARK_API_KEY。请在项目根目录创建 .env 并填入密钥（参考 .env.example）",
+        )
+
+    batch_id = uuid.uuid4().hex[:10]
+    jobs: list[dict[str, str]] = []
+
+    for index, item in enumerate(body.items):
+        label = _safe_batch_label(item.label or item.url, index)
+        output_path = _resolve_batch_output_path(
+            output_dir=body.output_dir,
+            output_path=body.output_path,
+            label=label,
+            index=index,
+        )
+        refs = [
+            MediaReference(
+                type="image_url",
+                url=item.url.strip(),
+                role=item.role or "reference_image",
+            )
+        ]
+        job_id = _submit_video_job(
+            prompt=body.prompt,
+            references=refs,
+            model=body.model,
+            ratio=body.ratio,
+            resolution=body.resolution,
+            duration=body.duration,
+            generate_audio=body.generate_audio,
+            watermark=body.watermark,
+            output_path=output_path,
+            label=label,
+            batch_id=batch_id,
+        )
+        jobs.append({"job_id": job_id, "label": label, "output_path": output_path or ""})
+
+    return {
+        "batch_id": batch_id,
+        "total": len(jobs),
+        "jobs": jobs,
+        "message": f"已提交 {len(jobs)} 个视频任务，后台并行处理（最多 4 路同时运行）",
+    }
 
 
 @app.post("/api/jobs/workflow")
