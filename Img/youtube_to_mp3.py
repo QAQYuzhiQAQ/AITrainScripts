@@ -59,12 +59,13 @@ def download_youtube_to_mp3(links_str, save_dir="./youtube_mp3"):
             try:
                 # 下载并转换当前链接
                 ydl.download([link])
-                print(f"✅ 第 {idx} 个链接处理成功！")
-                success_count += 1
+                print(f"[成功] 第 {idx}/{len(links)} 个链接")
             except Exception as e:
-                error_msg = f"❌ 第 {idx} 个链接处理失败：{str(e)}"
+                error_msg = f"[失败] 第 {idx}/{len(links)} 个链接：{e}"
                 print(error_msg)
                 fail_links.append((link, error_msg))
+                continue
+            success_count += 1
 
     # 5. 输出最终统计结果
     print("\n" + "-"*50)

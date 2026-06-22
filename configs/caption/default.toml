@@ -1,0 +1,16 @@
+# 通用 Caption 清洗预设（预处理残留 tag、低质量 tag 等）
+
+name = "通用清洗"
+trigger_word = ""
+character_tag = ""
+strip_tags = "black_background, simple_background, white_background, grey_background, gray_background, lowres, bad_quality, worst_quality, watermark, signature, artist_name, text, jpeg_artifacts, blurry"
+ensure_tags = ""
+expected_gender = ""
+remove_if_missing = ""
+flag_if_present = ""
+mutual_exclude = ""
+dedupe = true
+separator = ", "
+
+# 打标阶段默认排除（方案 3）
+tag_undesired = "black_background, simple_background, lowres, bad_quality, worst_quality, watermark, signature, artist_name"

@@ -21,5 +21,5 @@ def create_knowledge_base(input_file, chunk_size=500):
             current_chunk = ""
 
     # 这里通常会配合数据库，比如 ChromaDB
-    print(f"📚 剧情解析完毕！一共切成了 {len(chunks)} 个知识点。")
+    print(f"文本已切分为 {len(chunks)} 个块。")
     return chunks

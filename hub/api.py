@@ -16,11 +16,27 @@ from hub.config import HOST, PORT
 from hub.jobs import job_manager
 from img_tools.common import JobResult, register_heif_opener
 from img_tools.convert import process_all
+from img_tools.to_ico import ToIcoOptions, convert_images_to_ico
+from img_tools.compress import CompressOptions, compress_images, parse_max_bytes
+from img_tools.format_convert import FormatConvertOptions, convert_images_format
 from img_tools.crop_2k import crop_2k_png_recursive
 from img_tools.filter_2k import filter_2k_images
 from img_tools.rename import batch_rename_numbered, rename_sequential
+from img_tools.rename_folders import SubfolderRenameOptions, rename_subfolders
 from img_tools.resize import resize_png_center_batch
 from img_tools.workflow import RenameMode, ResizeMode, WorkflowRenameOptions, run_prepare_workflow
+from img_tools.tagger import WD14TagOptions, tag_images_wd14
+from img_tools.lora_train import list_presets, load_preset_config, run_lora_train
+from img_tools.lora_pipeline import LoraPipelineOptions, run_lora_pipeline
+from img_tools.workflow import ResizeMode
+from img_tools.caption import (
+    CaptionCleanOptions,
+    clean_captions_in_dir,
+    get_tag_undesired_for_preset,
+    get_trigger_for_preset,
+    list_presets as list_caption_presets,
+    load_preset as load_caption_preset,
+)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -48,6 +64,34 @@ class ConvertRequest(BaseModel):
     base_height: int = Field(1024, ge=64)
     recursive: bool = False
     rename_output: bool = True
+
+
+class ToIcoRequest(BaseModel):
+    input_dir: str
+    output_dir: str | None = None
+    sizes: str = "16,32,48,64,128,256"
+    max_canvas: int = Field(256, ge=16, le=512)
+    recursive: bool = False
+
+
+class CompressRequest(BaseModel):
+    input_dir: str
+    output_dir: str | None = None
+    max_size: float = Field(500, gt=0)
+    size_unit: Literal["kb", "mb"] = "kb"
+    output_format: Literal["auto", "jpeg", "webp", "png"] = "auto"
+    recursive: bool = True
+    in_place: bool = True
+
+
+class FormatConvertRequest(BaseModel):
+    input_dir: str
+    output_dir: str | None = None
+    target_format: Literal["png", "jpeg", "webp", "bmp", "gif", "tiff"] = "png"
+    quality: int = Field(90, ge=1, le=100)
+    recursive: bool = True
+    in_place: bool = True
+    skip_same_format: bool = False
 
 
 class ResizeCanvasRequest(BaseModel):
@@ -81,6 +125,14 @@ class RenameRequest(BaseModel):
     sync_captions: bool = False
 
 
+class SubfolderRenameRequest(BaseModel):
+    root_dir: str
+    prefix: str = "10_"
+    remove_spaces: bool = True
+    recursive: bool = False
+    dry_run: bool = True
+
+
 class WorkflowRequest(BaseModel):
     source_dir: str
     output_dir: str
@@ -94,6 +146,177 @@ class WorkflowRequest(BaseModel):
     digits: int = Field(4, ge=1, le=8)
     start_index: int = Field(1, ge=0)
     sync_captions: bool = True
+
+
+class AutoTagRequest(BaseModel):
+    image_dir: str
+    repo_id: str = "SmilingWolf/wd-vit-tagger-v3"
+    batch_size: int = Field(4, ge=1, le=32)
+    general_threshold: float = Field(0.35, ge=0.0, le=1.0)
+    character_threshold: float = Field(0.1, ge=0.0, le=1.0)
+    trigger_word: str = ""
+    undesired_tags: str = ""
+    caption_preset: str = "default"
+    auto_clean: bool = True
+    clean_preset: str = ""
+    recursive: bool = False
+    remove_underscore: bool = False
+    append_tags: bool = False
+
+
+class CaptionCleanRequest(BaseModel):
+    target_dir: str
+    preset: str = "default"
+    recursive: bool = False
+    dry_run: bool = False
+    trigger_word: str = ""
+    strip_tags: str = ""
+    ensure_tags: str = ""
+
+
+def _resolve_tag_options(body: AutoTagRequest) -> WD14TagOptions:
+    """合并 Caption 预设中的打标排除项（方案 3）。"""
+    preset_id = body.caption_preset or "default"
+    preset_undesired = get_tag_undesired_for_preset(preset_id)
+    preset_trigger = get_trigger_for_preset(preset_id)
+
+    undesired = body.undesired_tags.strip()
+    if not undesired:
+        undesired = preset_undesired
+    elif preset_undesired:
+        merged = {t.strip() for t in (undesired + ", " + preset_undesired).split(",") if t.strip()}
+        undesired = ", ".join(sorted(merged))
+
+    trigger = body.trigger_word.strip() or preset_trigger
+
+    return WD14TagOptions(
+        repo_id=body.repo_id,
+        batch_size=body.batch_size,
+        general_threshold=body.general_threshold,
+        character_threshold=body.character_threshold,
+        always_first_tags=trigger,
+        undesired_tags=undesired,
+        recursive=body.recursive,
+        remove_underscore=body.remove_underscore,
+        append_tags=body.append_tags,
+    )
+
+
+def _merge_job_results(tag: JobResult, clean: JobResult) -> JobResult:
+    return JobResult(
+        ok=tag.ok and clean.ok,
+        message=f"{tag.message} → {clean.message}",
+        processed=tag.processed + clean.processed,
+        skipped=tag.skipped + clean.skipped,
+        errors=[*tag.errors, *clean.errors],
+        details=[*tag.details, *clean.details],
+        outputs=[*tag.outputs, *clean.outputs],
+    )
+
+
+class LoraTrainRequest(BaseModel):
+    preset: str = "morgana_star_nemesis"
+    train_data_dir: str | None = None
+    pretrained_model_name_or_path: str | None = None
+    output_name: str | None = None
+    output_dir: str | None = None
+    max_train_epochs: int | None = Field(None, ge=1)
+    train_batch_size: int | None = Field(None, ge=1)
+    save_every_n_epochs: int | None = Field(None, ge=1)
+    resolution_width: int | None = Field(None, ge=256)
+    resolution_height: int | None = Field(None, ge=256)
+    network_dim: int | None = Field(None, ge=1)
+    network_alpha: int | None = Field(None, ge=1)
+    unet_lr: float | None = Field(None, gt=0)
+    keep_tokens: int | None = Field(None, ge=0)
+    bucket_no_upscale: bool | None = None
+    full_bf16: bool | None = None
+
+
+class LoraPipelineRequest(BaseModel):
+    """LoRA 角色训练完整流水线（8 步）。"""
+
+    character_root: str
+    repeat_count: int = Field(10, ge=1, le=999)
+    resize_mode: Literal["area_64", "fixed_canvas"] = "area_64"
+    target_width: int = Field(1024, ge=1)
+    target_height: int = Field(1024, ge=1)
+    rename_prefix: str = ""
+    rename_digits: int = Field(4, ge=1, le=8)
+    caption_preset: str = "default"
+    trigger_word: str = ""
+    extra_undesired_tags: str = ""
+    tag_general_threshold: float = Field(0.35, ge=0.0, le=1.0)
+    tag_character_threshold: float = Field(0.1, ge=0.0, le=1.0)
+    lora_preset: str = "morgana_star_nemesis"
+    pretrained_model_name_or_path: str | None = None
+    output_name: str | None = None
+    output_dir: str | None = None
+    max_train_epochs: int | None = Field(None, ge=1)
+    train_batch_size: int | None = Field(None, ge=1)
+    save_every_n_epochs: int | None = Field(None, ge=1)
+    resolution_width: int | None = Field(None, ge=256)
+    resolution_height: int | None = Field(None, ge=256)
+    network_dim: int | None = Field(None, ge=1)
+    network_alpha: int | None = Field(None, ge=1)
+    unet_lr: float | None = Field(None, gt=0)
+    keep_tokens: int | None = Field(None, ge=0)
+    bucket_no_upscale: bool | None = None
+    full_bf16: bool | None = None
+
+
+def _lora_train_overrides(body: LoraTrainRequest) -> dict[str, Any]:
+    """将 Hub 表单字段转为 Kohya 配置覆盖项。"""
+    overrides: dict[str, Any] = {}
+    direct = (
+        "train_data_dir",
+        "pretrained_model_name_or_path",
+        "output_name",
+        "output_dir",
+        "max_train_epochs",
+        "train_batch_size",
+        "save_every_n_epochs",
+        "network_dim",
+        "network_alpha",
+        "keep_tokens",
+        "bucket_no_upscale",
+        "full_bf16",
+    )
+    for key in direct:
+        val = getattr(body, key)
+        if val is not None and val != "":
+            overrides[key] = val
+
+    if body.resolution_width and body.resolution_height:
+        overrides["resolution"] = f"{body.resolution_width},{body.resolution_height}"
+
+    if body.unet_lr is not None:
+        overrides["unet_lr"] = body.unet_lr
+        overrides["learning_rate"] = body.unet_lr
+
+    return overrides
+
+
+def _pipeline_lora_overrides(body: LoraPipelineRequest) -> dict[str, Any]:
+    """流水线训练步覆盖项（train_data_dir 由 runner 强制设为 output/）。"""
+    fake = LoraTrainRequest(
+        preset=body.lora_preset,
+        pretrained_model_name_or_path=body.pretrained_model_name_or_path,
+        output_name=body.output_name,
+        output_dir=body.output_dir,
+        max_train_epochs=body.max_train_epochs,
+        train_batch_size=body.train_batch_size,
+        save_every_n_epochs=body.save_every_n_epochs,
+        resolution_width=body.resolution_width,
+        resolution_height=body.resolution_height,
+        network_dim=body.network_dim,
+        network_alpha=body.network_alpha,
+        unet_lr=body.unet_lr,
+        keep_tokens=body.keep_tokens,
+        bucket_no_upscale=body.bucket_no_upscale,
+        full_bf16=body.full_bf16,
+    )
+    return _lora_train_overrides(fake)
 
 
 # --- Routes ---
@@ -118,12 +341,21 @@ def health() -> dict[str, Any]:
     except ImportError:
         pass
 
+    onnx_ok = False
+    try:
+        import onnxruntime  # noqa: F401
+
+        onnx_ok = True
+    except ImportError:
+        pass
+
     return {
         "status": "ok",
         "dependencies": {
             "pillow": pillow_ok,
             "pillow_heif": heif_ok,
             "natsort": natsort_ok,
+            "onnxruntime": onnx_ok,
         },
     }
 
@@ -155,6 +387,56 @@ def job_convert(body: ConvertRequest) -> dict:
         )
 
     job_id = job_manager.submit("convert", run)
+    return {"job_id": job_id}
+
+
+@app.post("/api/jobs/to-ico")
+def job_to_ico(body: ToIcoRequest) -> dict:
+    def run() -> JobResult:
+        return convert_images_to_ico(
+            body.input_dir,
+            body.output_dir,
+            options=ToIcoOptions(
+                max_canvas=body.max_canvas,
+                recursive=body.recursive,
+            ),
+            sizes=body.sizes,
+        )
+
+    job_id = job_manager.submit("to-ico", run)
+    return {"job_id": job_id}
+
+
+@app.post("/api/jobs/compress")
+def job_compress(body: CompressRequest) -> dict:
+    opts = CompressOptions(
+        max_bytes=parse_max_bytes(body.max_size, body.size_unit),
+        output_format=body.output_format,
+        recursive=body.recursive,
+        in_place=body.in_place,
+    )
+
+    def run() -> JobResult:
+        return compress_images(body.input_dir, body.output_dir, options=opts)
+
+    job_id = job_manager.submit("compress", run)
+    return {"job_id": job_id}
+
+
+@app.post("/api/jobs/format-convert")
+def job_format_convert(body: FormatConvertRequest) -> dict:
+    opts = FormatConvertOptions(
+        target_format=body.target_format,
+        quality=body.quality,
+        recursive=body.recursive,
+        in_place=body.in_place,
+        skip_same_format=body.skip_same_format,
+    )
+
+    def run() -> JobResult:
+        return convert_images_format(body.input_dir, body.output_dir, options=opts)
+
+    job_id = job_manager.submit("format-convert", run)
     return {"job_id": job_id}
 
 
@@ -225,6 +507,55 @@ def job_rename(body: RenameRequest) -> dict:
     return {"job_id": job_id}
 
 
+@app.post("/api/jobs/rename-subfolders")
+def job_rename_subfolders(body: SubfolderRenameRequest) -> dict:
+    opts = SubfolderRenameOptions(
+        prefix=body.prefix,
+        remove_spaces=body.remove_spaces,
+        recursive=body.recursive,
+        dry_run=body.dry_run,
+    )
+
+    def run() -> JobResult:
+        return rename_subfolders(body.root_dir, options=opts)
+
+    job_id = job_manager.submit("rename-subfolders", run)
+    return {"job_id": job_id}
+
+
+@app.post("/api/jobs/lora-pipeline")
+def job_lora_pipeline(body: LoraPipelineRequest) -> dict:
+    lora_overrides = _pipeline_lora_overrides(body)
+    pipe_opts = LoraPipelineOptions(
+        character_root=body.character_root,
+        repeat_count=body.repeat_count,
+        resize_mode=ResizeMode(body.resize_mode),
+        target_width=body.target_width,
+        target_height=body.target_height,
+        rename_prefix=body.rename_prefix,
+        rename_digits=body.rename_digits,
+        caption_preset=body.caption_preset,
+        trigger_word=body.trigger_word,
+        extra_undesired_tags=body.extra_undesired_tags,
+        tag_general_threshold=body.tag_general_threshold,
+        tag_character_threshold=body.tag_character_threshold,
+        lora_preset=body.lora_preset,
+        lora_overrides=lora_overrides,
+    )
+
+    def build_run(job_id: str):
+        def on_progress(prog: dict, line: str) -> None:
+            job_manager.update_live(job_id, progress=prog, log_line=line)
+
+        def run() -> JobResult:
+            return run_lora_pipeline(pipe_opts, progress_callback=on_progress)
+
+        return run
+
+    job_id = job_manager.submit_builder("lora-pipeline", build_run)
+    return {"job_id": job_id}
+
+
 @app.post("/api/jobs/workflow")
 def job_workflow(body: WorkflowRequest) -> dict:
     rename = WorkflowRenameOptions(
@@ -248,6 +579,96 @@ def job_workflow(body: WorkflowRequest) -> dict:
         )
 
     job_id = job_manager.submit("workflow", run)
+    return {"job_id": job_id}
+
+
+@app.post("/api/jobs/auto-tag")
+def job_auto_tag(body: AutoTagRequest) -> dict:
+    opts = _resolve_tag_options(body)
+    clean_preset = body.clean_preset.strip() or body.caption_preset or "default"
+
+    def run() -> JobResult:
+        tag_result = tag_images_wd14(body.image_dir, opts)
+        if not body.auto_clean or not tag_result.ok:
+            return tag_result
+        clean_opts = CaptionCleanOptions(
+            preset=clean_preset,
+            recursive=body.recursive,
+            dry_run=False,
+            trigger_word=opts.always_first_tags or None,
+        )
+        clean_result = clean_captions_in_dir(body.image_dir, clean_opts)
+        return _merge_job_results(tag_result, clean_result)
+
+    job_id = job_manager.submit("auto-tag", run)
+    return {"job_id": job_id}
+
+
+@app.get("/api/caption/presets")
+def api_caption_presets() -> dict:
+    return {"presets": list_caption_presets()}
+
+
+@app.get("/api/caption/presets/{preset_id}")
+def api_caption_preset_detail(preset_id: str) -> dict:
+    try:
+        config = load_caption_preset(preset_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Caption 预设不存在")
+    return {
+        "preset": preset_id,
+        "config": config,
+        "tag_undesired": get_tag_undesired_for_preset(preset_id),
+        "trigger_word": get_trigger_for_preset(preset_id),
+    }
+
+
+@app.post("/api/jobs/caption-clean")
+def job_caption_clean(body: CaptionCleanRequest) -> dict:
+    opts = CaptionCleanOptions(
+        preset=body.preset,
+        recursive=body.recursive,
+        dry_run=body.dry_run,
+        trigger_word=body.trigger_word or None,
+        strip_tags=body.strip_tags or None,
+        ensure_tags=body.ensure_tags or None,
+    )
+
+    def run() -> JobResult:
+        return clean_captions_in_dir(body.target_dir, opts)
+
+    job_id = job_manager.submit("caption-clean", run)
+    return {"job_id": job_id}
+
+
+@app.get("/api/lora/presets")
+def api_lora_presets() -> dict:
+    return {"presets": list_presets()}
+
+
+@app.get("/api/lora/presets/{preset_id}")
+def api_lora_preset_detail(preset_id: str) -> dict:
+    try:
+        config = load_preset_config(preset_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="预设不存在")
+    return {"preset": preset_id, "config": config}
+
+
+@app.post("/api/jobs/lora-train")
+def job_lora_train(body: LoraTrainRequest) -> dict:
+    overrides = _lora_train_overrides(body)
+
+    def build_run(job_id: str):
+        def on_progress(prog: dict, line: str) -> None:
+            job_manager.update_live(job_id, progress=prog, log_line=line)
+
+        def run() -> JobResult:
+            return run_lora_train(body.preset, overrides=overrides, progress_callback=on_progress)
+
+        return run
+
+    job_id = job_manager.submit_builder("lora-train", build_run)
     return {"job_id": job_id}
 
 

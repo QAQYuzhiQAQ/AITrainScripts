@@ -43,7 +43,7 @@ def create_sft_dataset(input_file, output_jsonl, chunk_size=800, overlap=200):
         for entry in dataset:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
 
-    print(f"📦 搞定！共生成 {len(dataset)} 条训练数据。拿去喂给 Gemma 3 吧！")
+    print(f"已生成 {len(dataset)} 条训练数据，输出：{output_jsonl}")
 
 # 使用示例
 # create_sft_dataset('cleaned_novel.txt', 'novel_train_data.jsonl')

@@ -24,6 +24,6 @@ if __name__ == "__main__":
     if confirm.lower() == "y":
         result = filter_2k_images(path_to_clean, dry_run=False)
         print_job_result(result)
-        print("\n✨ 清理完毕！")
+        print("\n清理完成。")
     else:
-        print("\n✋ 操作已取消，文件安全~")
+        print("\n操作已取消。")

@@ -23,6 +23,47 @@ def ensure_dir(path: str | Path) -> None:
     Path(path).mkdir(parents=True, exist_ok=True)
 
 
+def resolve_batch_output_dir(
+    input_root: Path,
+    output_dir: str | Path | None,
+    *,
+    in_place: bool,
+    subfolder_name: str,
+) -> Path:
+    """确定批量处理的输出根目录。"""
+    if in_place:
+        return input_root
+    if output_dir:
+        out = Path(output_dir)
+        ensure_dir(out)
+        return out
+    out = input_root / subfolder_name
+    ensure_dir(out)
+    return out
+
+
+def atomic_write_bytes(path: Path, data: bytes) -> None:
+    """原子写入，避免原地覆盖时损坏原文件。"""
+    ensure_dir(path.parent)
+    tmp = path.with_suffix(path.suffix + ".part")
+    try:
+        tmp.write_bytes(data)
+        tmp.replace(path)
+    finally:
+        if tmp.exists() and tmp.resolve() != path.resolve():
+            tmp.unlink(missing_ok=True)
+
+
+def finalize_in_place_source(src: Path, out_path: Path, *, in_place: bool) -> None:
+    """原地模式下，扩展名变更后删除原文件。"""
+    if not in_place:
+        return
+    if src.resolve() == out_path.resolve():
+        return
+    if src.is_file():
+        src.unlink()
+
+
 def register_heif_opener() -> bool:
     """注册 HEIC/HEIF 支持；成功返回 True。"""
     try:
@@ -50,4 +91,4 @@ def print_job_result(result: JobResult) -> None:
     for line in result.details:
         print(line)
     for err in result.errors:
-        print(f"❌ {err}")
+        print(f"[错误] {err}")

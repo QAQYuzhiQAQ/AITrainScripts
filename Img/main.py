@@ -13,6 +13,15 @@
 #   rename_images_sequential.py - 图片批量重命名（纯序号）
 #   dedupe_comma_txt_tags.py    - 逗号分隔 txt 标签去重与过滤
 #   youtube_to_mp3.py           - YouTube 视频批量转 MP3
+#
+# 根目录 CLI / Hub:
+#   auto_tag_wd14.py              - WD14 自动打标（LoRA caption）
+#   convert_format.py             - 图片格式互转（保持尺寸）
+#   rename_subfolders.py           - 子文件夹重命名（10_ 前缀 + 去空格）
+#   make_ico.py                   - PNG/JPG 等转 Windows ICO
+#   prepare_dataset.py            - LoRA 数据准备工作流（旧版分步）
+#   run_lora_pipeline.py          - LoRA 完整流程（8 步一键）
+#   python -m hub                 - Web Hub（含自动打标页面）
 # =============================================================================
 
 if __name__ == '__main__':

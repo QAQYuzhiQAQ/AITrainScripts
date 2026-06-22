@@ -3,3 +3,9 @@ natsort>=8.0.0
 pillow-heif>=0.13.0; python_version >= "3.9"
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
+numpy>=1.24.0
+opencv-python-headless>=4.8.0
+huggingface-hub>=0.20.0
+onnxruntime-gpu>=1.16.0; platform_system != "Darwin"
+onnxruntime>=1.16.0; platform_system == "Darwin"
+torch>=2.0.0

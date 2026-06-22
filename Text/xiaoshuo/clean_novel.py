@@ -24,7 +24,7 @@ def clean_novel(input_file, output_file):
 
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(cleaned_text)
-    print(f"✨ 宝，清洗完成！干净的小说已经存到 {output_file} 啦！")
+    print(f"清洗完成，输出文件：{output_file}")
 
 # 使用示例
 # clean_novel('my_novel_raw.txt', 'cleaned_novel.txt')

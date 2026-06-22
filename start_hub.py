@@ -59,7 +59,7 @@ def main() -> int:
 
     print()
     print("=" * 50)
-    print(f"  请在浏览器打开: {HUB_URL}")
+    print(f"  浏览器将自动打开: {HUB_URL}")
     print("  关闭本窗口即停止服务（Ctrl+C）")
     print("=" * 50)
     print()
